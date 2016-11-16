@@ -263,6 +263,10 @@ public class DownstreamPassCondition extends PromotionCondition {
         public void onCompleted(AbstractBuild<?,?> build, TaskListener listener) {
             // this is not terribly efficient,
             EnvVars buildEnvironment = new EnvVars(build.getBuildVariables());
+
+            List<String> promotedJobs = new ArrayList<String>();
+            List<String> missingFingerprintJobs = new ArrayList<String>();
+
             for(AbstractProject<?,?> j : JenkinsHelper.getInstance().getAllItems(AbstractProject.class)) {
                 boolean warned = false; // used to avoid warning for the same project more than once.
 
@@ -308,15 +312,15 @@ public class DownstreamPassCondition extends PromotionCondition {
                                 if (u==null) {
                                     // no upstream build. perhaps a configuration problem?
                                     if(build.getResult()==Result.SUCCESS && !warned) {
-                                        listener.getLogger().println("WARNING: "+j.getFullDisplayName()+" appears to use this job as a promotion criteria, " +
-                                            "but no fingerprint is recorded. Fingerprint needs to be enabled on both this job and "+j.getFullDisplayName()+". " +
-                                                "See http://hudson.gotdns.com/wiki/display/HUDSON/Fingerprint for more details");
+                                        missingFingerprintJobs.add(j.getFullDisplayName());
                                         warned = true;
                                     }
                                 }
 
-                                if(u!=null && p.considerPromotion2(u)!=null)
-                                    listener.getLogger().println("Promoted "+HyperlinkNote.encodeTo('/'+u.getUrl(),u.getFullDisplayName()));
+                                if(u!=null && p.considerPromotion2(u)!=null) {
+                                    promotedJobs.add(u.getFullDisplayName());
+                                    listener.getLogger().println("Promoted " + HyperlinkNote.encodeTo('/' + u.getUrl(), u.getFullDisplayName()));
+                                }
                             } catch (IOException e) {
                                 e.printStackTrace(listener.error("Failed to promote a build"));
                             }
@@ -324,6 +328,16 @@ public class DownstreamPassCondition extends PromotionCondition {
                     }
                 }
             }
+
+            if (promotedJobs.isEmpty()) {
+                for (String jobName : missingFingerprintJobs) {
+                    listener.getLogger().println("WARNING: " + jobName + " appears to use this job as a promotion criteria, " +
+                        "but no fingerprint is recorded. Fingerprint needs to be enabled on both this job and " + jobName + ". " +
+                        "See http://hudson.gotdns.com/wiki/display/HUDSON/Fingerprint for more details");
+                }
+            }
+
+
         }
 
         /**
